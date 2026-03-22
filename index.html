@@ -55,18 +55,20 @@
     addDoc,
     onSnapshot
   } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-  const firebaseConfig = {
-    apiKey: "AIzaSyDF4ffOkfFUQNtiXIuR2gsjB2xWaJhzrzw",
-    authDomain: "cookbook-62f7e.firebaseapp.com",
-    projectId: "cookbook-62f7e",
-    storageBucket: "cookbook-62f7e.firebasestorage.app",
-    messagingSenderId: "654857944608",
-    appId: "1:654857944608:web:96cafa723d5ccd67b1c645"
-  };
 
-  // Initialize Firebase
+  // 🔥 ВСТАВЬ СЮДА СВОЙ CONFIG
+ const firebaseConfig = {
+  apiKey: "AIzaSyDF4ffOkfFUQNtiXIuR2gsjB2xWaJhzrzw",
+  authDomain: "cookbook-62f7e.firebaseapp.com",
+  projectId: "cookbook-62f7e",
+  storageBucket: "cookbook-62f7e.firebasestorage.app",
+  messagingSenderId: "654857944608",
+  appId: "1:654857944608:web:96cafa723d5ccd67b1c645"
+};
+
   const app = initializeApp(firebaseConfig);
-</script>
+  const db = getFirestore(app);
+  const col = collection(db, "recipes");
 
   // ➕ Добавить рецепт
   window.addRecipe = async function () {
