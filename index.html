@@ -93,7 +93,7 @@
   <div class="form">
     <input id="title" placeholder="Название рецепта" />
     <textarea id="text" rows="4" placeholder="Описание рецепта"></textarea>
-    <input type="file" id="image" />
+    <input id="imageUrl" placeholder="Ссылка на изображение (URL)" />
     <button onclick="addRecipe()">Добавить рецепт</button>
   </div>
 
@@ -113,13 +113,6 @@
     serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-  import {
-    getStorage,
-    ref,
-    uploadBytes,
-    getDownloadURL
-  } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
-
   const firebaseConfig = {
     apiKey: "AIzaSyDF4ffOkfFUQNtiXIuR2gsjB2xWaJhzrzw",
     authDomain: "cookbook-62f7e.firebaseapp.com",
@@ -131,7 +124,6 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
-  const storage = getStorage(app);
 
   const recipesDiv = document.getElementById("recipes");
 
@@ -143,7 +135,7 @@
 
       recipesDiv.innerHTML += `
         <div class="card">
-          <img src="${data.image}" />
+          <img src="${data.image || 'https://via.placeholder.com/300?text=Нет+фото'}" />
           <div class="card-content">
             <h3>${data.title}</h3>
             <p>${data.text}</p>
@@ -154,33 +146,27 @@
     });
   });
 
+  // добавление рецепта
   window.addRecipe = async function () {
     const title = document.getElementById("title").value;
     const text = document.getElementById("text").value;
-    const file = document.getElementById("image").files[0];
+    const imageUrl = document.getElementById("imageUrl").value;
 
     if (!title || !text) return alert("Заполни поля!");
-
-    let imageUrl = "";
-
-    if (file) {
-      const imgRef = ref(storage, "images/" + Date.now() + file.name);
-      await uploadBytes(imgRef, file);
-      imageUrl = await getDownloadURL(imgRef);
-    }
 
     await addDoc(collection(db, "recipes"), {
       title,
       text,
-      image: imageUrl,
+      image: imageUrl || "",
       createdAt: serverTimestamp()
     });
 
     document.getElementById("title").value = "";
     document.getElementById("text").value = "";
-    document.getElementById("image").value = "";
+    document.getElementById("imageUrl").value = "";
   };
 
+  // удаление рецепта
   window.deleteRecipe = async function (id) {
     await deleteDoc(doc(db, "recipes", id));
   };
