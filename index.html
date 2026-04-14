@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Кулинарная книга</title>
+  <title>Кулинарная книга (Supabase + Realtime + Storage)</title>
 
   <style>
     body {
@@ -74,10 +74,25 @@
       padding: 10px;
     }
 
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
     .delete {
       background: #333;
-      margin-top: 10px;
-      width: 100%;
+      flex: 1;
+    }
+
+    .edit {
+      background: #ffa94d;
+      flex: 1;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #666;
     }
   </style>
 </head>
@@ -85,90 +100,229 @@
 <body>
 
 <header>
-  <h1>🍲 Кулинарная книга</h1>
+  <h1>🍲 Кулинарная книга (Supabase)</h1>
 </header>
 
 <div class="container">
 
   <div class="form">
+    <h3 id="formTitle">Добавить рецепт</h3>
     <input id="title" placeholder="Название рецепта" />
     <textarea id="text" rows="4" placeholder="Описание рецепта"></textarea>
-    <input id="imageUrl" placeholder="Ссылка на изображение (URL)" />
-    <button onclick="addRecipe()">Добавить рецепт</button>
+
+    <!-- URL картинки (опционально) -->
+    <input id="imageUrl" placeholder="Ссылка на изображение (URL, необязательно)" />
+
+    <!-- Загрузка файла в Supabase Storage -->
+    <label class="small">Или загрузить картинку файлом:</label>
+    <input id="imageFile" type="file" accept="image/*" />
+
+    <button id="submitBtn" onclick="submitRecipe()">Добавить рецепт</button>
+    <button id="cancelEditBtn" style="display:none; margin-left:8px; background:#777;" onclick="cancelEdit()">Отмена</button>
   </div>
 
   <div class="recipes" id="recipes"></div>
 </div>
 
-<!-- Firebase -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import {
-    getFirestore,
-    collection,
-    addDoc,
-    onSnapshot,
-    deleteDoc,
-    doc,
-    serverTimestamp
-  } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDF4ffOkfFUQNtiXIuR2gsjB2xWaJhzrzw",
-    authDomain: "cookbook-62f7e.firebaseapp.com",
-    projectId: "cookbook-62f7e",
-    storageBucket: "cookbook-62f7e.firebasestorage.app",
-    messagingSenderId: "654857944608",
-    appId: "1:654857944608:web:96cafa723d5ccd67b1c645"
-  };
+  // 🔥 ВСТАВЬ СВОИ ДАННЫЕ:
+  const supabaseUrl = "https://qnbvtpxxjjfjwayjojgt.supabase.co";
+  const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuYnZ0cHh4ampmandheWpvamd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNjk3MjUsImV4cCI6MjA5MTc0NTcyNX0.SwIbelixyUi5Bomis2qUKHCYttMpH3sPLHiQf1aa2y4";
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+  const supabase = createClient(supabaseUrl, supabaseKey);
 
   const recipesDiv = document.getElementById("recipes");
+  const titleInput = document.getElementById("title");
+  const textInput = document.getElementById("text");
+  const imageUrlInput = document.getElementById("imageUrl");
+  const imageFileInput = document.getElementById("imageFile");
+  const formTitle = document.getElementById("formTitle");
+  const submitBtn = document.getElementById("submitBtn");
+  const cancelEditBtn = document.getElementById("cancelEditBtn");
 
-  // загрузка рецептов
-  onSnapshot(collection(db, "recipes"), (snapshot) => {
+  let editingId = null; // если null — создаём, если есть — редактируем
+
+  // ====== ЗАГРУЗКА СПИСКА РЕЦЕПТОВ ======
+  async function loadRecipes() {
+    const { data, error } = await supabase
+      .from("recipes")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    renderRecipes(data);
+  }
+
+  function renderRecipes(data) {
     recipesDiv.innerHTML = "";
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
 
+    data.forEach((item) => {
       recipesDiv.innerHTML += `
         <div class="card">
-          <img src="${data.image || 'https://via.placeholder.com/300?text=Нет+фото'}" />
+          <img src="${item.image || 'https://via.placeholder.com/300?text=Нет+фото'}" />
           <div class="card-content">
-            <h3>${data.title}</h3>
-            <p>${data.text}</p>
-            <button class="delete" onclick="deleteRecipe('${docSnap.id}')">Удалить</button>
+            <h3>${item.title}</h3>
+            <p>${item.text}</p>
+            <div class="actions">
+              <button class="edit" onclick="startEdit('${item.id}', '${encodeURIComponent(item.title)}', '${encodeURIComponent(item.text)}', '${encodeURIComponent(item.image || "")}')">Редактировать</button>
+              <button class="delete" onclick="deleteRecipe('${item.id}')">Удалить</button>
+            </div>
           </div>
         </div>
       `;
     });
-  });
+  }
 
-  // добавление рецепта
-  window.addRecipe = async function () {
-    const title = document.getElementById("title").value;
-    const text = document.getElementById("text").value;
-    const imageUrl = document.getElementById("imageUrl").value;
+  // ====== REALTIME ОБНОВЛЕНИЕ ======
+  // Подписка на изменения в таблице recipes
+  supabase
+    .channel('public:recipes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'recipes' },
+      (payload) => {
+        // Можно было бы обновлять точечно, но для простоты перезагрузим список
+        loadRecipes();
+      }
+    )
+    .subscribe();
 
-    if (!title || !text) return alert("Заполни поля!");
+  // Первичная загрузка
+  loadRecipes();
 
-    await addDoc(collection(db, "recipes"), {
-      title,
-      text,
-      image: imageUrl || "",
-      createdAt: serverTimestamp()
-    });
+  // ====== ЗАГРУЗКА КАРТИНКИ В STORAGE ======
+  async function uploadImageIfNeeded() {
+    const file = imageFileInput.files[0];
+    const directUrl = imageUrlInput.value.trim();
 
-    document.getElementById("title").value = "";
-    document.getElementById("text").value = "";
-    document.getElementById("imageUrl").value = "";
+    // Если есть прямой URL — используем его
+    if (directUrl) {
+      return directUrl;
+    }
+
+    // Если файла нет — возвращаем пустую строку
+    if (!file) {
+      return "";
+    }
+
+    // Имя файла — уникальное
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `recipes/${fileName}`;
+
+    const { error: uploadError } = await supabase
+      .storage
+      .from("recipes-images") // 🔥 НАЗВАНИЕ ТВОЕГО BUCKET
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error(uploadError);
+      alert("Ошибка загрузки изображения");
+      return "";
+    }
+
+    const { data } = supabase
+      .storage
+      .from("recipes-images")
+      .getPublicUrl(filePath);
+
+    return data.publicUrl || "";
+  }
+
+  // ====== ДОБАВЛЕНИЕ / РЕДАКТИРОВАНИЕ РЕЦЕПТА ======
+  window.submitRecipe = async function () {
+    const title = titleInput.value.trim();
+    const text = textInput.value.trim();
+
+    if (!title || !text) {
+      alert("Заполни название и описание!");
+      return;
+    }
+
+    const image = await uploadImageIfNeeded();
+
+    if (!editingId) {
+      // Создание
+      const { error } = await supabase.from("recipes").insert({
+        title,
+        text,
+        image
+      });
+
+      if (error) {
+        console.error(error);
+        alert("Ошибка при добавлении рецепта");
+        return;
+      }
+    } else {
+      // Обновление
+      const { error } = await supabase
+        .from("recipes")
+        .update({
+          title,
+          text,
+          image
+        })
+        .eq("id", editingId);
+
+      if (error) {
+        console.error(error);
+        alert("Ошибка при обновлении рецепта");
+        return;
+      }
+    }
+
+    resetForm();
   };
 
-  // удаление рецепта
+  function resetForm() {
+    editingId = null;
+    titleInput.value = "";
+    textInput.value = "";
+    imageUrlInput.value = "";
+    imageFileInput.value = "";
+    formTitle.textContent = "Добавить рецепт";
+    submitBtn.textContent = "Добавить рецепт";
+    cancelEditBtn.style.display = "none";
+  }
+
+  // ====== НАЧАТЬ РЕДАКТИРОВАНИЕ ======
+  window.startEdit = function (id, encodedTitle, encodedText, encodedImage) {
+    editingId = id;
+    titleInput.value = decodeURIComponent(encodedTitle);
+    textInput.value = decodeURIComponent(encodedText);
+    const img = decodeURIComponent(encodedImage);
+    imageUrlInput.value = img || "";
+    imageFileInput.value = ""; // файл заново, если нужно
+
+    formTitle.textContent = "Редактировать рецепт";
+    submitBtn.textContent = "Сохранить изменения";
+    cancelEditBtn.style.display = "inline-block";
+  };
+
+  window.cancelEdit = function () {
+    resetForm();
+  };
+
+  // ====== УДАЛЕНИЕ РЕЦЕПТА ======
   window.deleteRecipe = async function (id) {
-    await deleteDoc(doc(db, "recipes", id));
+    if (!confirm("Точно удалить рецепт?")) return;
+
+    const { error } = await supabase
+      .from("recipes")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error(error);
+      alert("Ошибка при удалении");
+    }
   };
 </script>
 
